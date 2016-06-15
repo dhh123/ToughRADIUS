@@ -7,6 +7,7 @@ import importlib
 import cyclone.web
 from twisted.python import log
 from twisted.internet import reactor
+from twisted.application import service, internet
 from mako.lookup import TemplateLookup
 from sqlalchemy.orm import scoped_session, sessionmaker
 from toughlib import logger, utils, dispatch
@@ -91,7 +92,15 @@ class HttpServer(cyclone.web.Application):
 
         cyclone.web.Application.__init__(self, permit.all_handlers, **settings)
 
-def run(config, dbengine,**kwargs):
+def run(config, dbengine,service=None,**kwargs):
     app = HttpServer(config, dbengine)
-    reactor.listenTCP(int(config.admin.port), app, interface=config.admin.host)
+    if service:
+        s = internet.TCPServer(int(config.admin.port),app,interface = config.admin.host)
+        s.setServiceParent(service)
+    else:
+        reactor.listenTCP(int(config.admin.port), app, interface=config.admin.host)
+
+
+
+
 

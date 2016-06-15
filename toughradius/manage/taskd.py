@@ -6,6 +6,8 @@ import time
 import importlib
 from twisted.python import log
 from twisted.internet import reactor,defer
+from twisted.internet import protocol
+from twisted.application import service, internet
 from sqlalchemy.orm import scoped_session, sessionmaker
 from toughlib import logger, utils,dispatch
 from toughradius.manage import models
@@ -19,7 +21,7 @@ from toughlib import logger
 import toughradius
 import functools
 
-class TaskDaemon():
+class TaskDaemon(protocol.DatagramProtocol):
 
     __taskclss__ = []
 
@@ -70,6 +72,10 @@ class TaskDaemon():
                 continue
 
 
-def run(config, dbengine=None,**kwargs):
-    app = TaskDaemon(config, dbengine,**kwargs)
+def run(config, dbengine=None,service=None,**kwargs):
+    app = TaskDaemon(config, dbengine,service=service,**kwargs)
     app.start()
+    if service:
+        s1 = internet.UDPServer(0,app,interface="127.0.0.1")
+        s1.setServiceParent(service)
+    

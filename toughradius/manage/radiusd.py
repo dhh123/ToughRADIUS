@@ -10,6 +10,7 @@ from twisted.internet import protocol
 from twisted.internet import reactor
 from twisted.internet.threads import deferToThread
 from twisted.internet import defer
+from twisted.application import service, internet
 from toughlib import utils
 from toughlib import mcache
 from toughlib import logger,dispatch
@@ -96,7 +97,7 @@ class TraceMix:
         except Exception as err:
             logger.exception(err)
 
-class RADIUSAuthWorker(protocol.DatagramProtocol,TraceMix):
+class RADIUSAuthWorker(TraceMix):
 
     def __init__(self, config, dbengine, radcache=None):
         self.config = config
@@ -109,10 +110,10 @@ class RADIUSAuthWorker(protocol.DatagramProtocol,TraceMix):
         self.stat_pusher = ZmqPushConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-stat-task'))
         self.puller = ZmqPullConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-auth-message'))
         self.puller.onPull = self.process
-        reactor.listenUDP(0, self)
         logger.info("init auth worker pusher : %s " % (self.pusher))
         logger.info("init auth worker puller : %s " % (self.puller))
         logger.info("init auth stat pusher : %s " % (self.stat_pusher))
+
 
     def find_nas(self,ip_addr):
         def fetch_result():
@@ -145,7 +146,6 @@ class RADIUSAuthWorker(protocol.DatagramProtocol,TraceMix):
         if self.config.system.debug:
             logger.debug(reply.format_str())
         self.pusher.push(msgpack.packb([reply.ReplyPacket(),host,port]))
-        # self.transport.write(reply.ReplyPacket(), (host,port))
         self.do_stat(reply.code)
 
     def createAuthPacket(self, **kwargs):
@@ -351,17 +351,24 @@ class RADIUSAcctWorker(TraceMix):
             logger.exception(error)
 
 
-def run_auth(config):
+def run_auth(config,service=None):
     auth_protocol = RADIUSMaster(config, service='auth')
-    reactor.listenUDP(int(config.radiusd.auth_port), auth_protocol, interface=config.radiusd.host)
+    if service:
+        s = internet.UDPServer(int(config.radiusd.auth_port),auth_protocol,interface=config.radiusd.host)
+        s.setServiceParent(service)
+    else:
+        reactor.listenUDP(int(config.radiusd.auth_port), auth_protocol, interface=config.radiusd.host)
 
-def run_acct(config):
+def run_acct(config,service=None):
     acct_protocol = RADIUSMaster(config,service='acct')
-    reactor.listenUDP(int(config.radiusd.acct_port), acct_protocol, interface=config.radiusd.host)
+    if service:
+        s = internet.UDPServer(int(config.radiusd.acct_port),acct_protocol,interface=config.radiusd.host)
+        s.setServiceParent(service)
+    else:
+        reactor.listenUDP(int(config.radiusd.acct_port), acct_protocol, interface=config.radiusd.host)
 
-def run_worker(config,dbengine,**kwargs):
+def run_worker(config,dbengine,service=None,**kwargs):
     _cache = kwargs.pop("cache",CacheManager(redis_conf(config),cache_name='RadiusWorkerCache-%s'%os.getpid()))
-    _cache.print_hit_stat(120)
     # app event init
     if not kwargs.get('standalone'):
         logger.info("start register radiusd events")
@@ -369,7 +376,21 @@ def run_worker(config,dbengine,**kwargs):
         event_params= dict(dbengine=dbengine, mcache=_cache, aes=kwargs.pop('aes',None))
         event_path = os.path.abspath(os.path.dirname(toughradius.manage.events.__file__))
         dispatch.load_events(event_path,"toughradius.manage.events",event_params=event_params)
-    logger.info('start radius worker: %s' % RADIUSAuthWorker(config,dbengine,radcache=_cache))
-    logger.info('start radius worker: %s' % RADIUSAcctWorker(config,dbengine,radcache=_cache))
+    auth_worker = RADIUSAuthWorker(config,dbengine,radcache=_cache)
+    acct_worker = RADIUSAcctWorker(config,dbengine,radcache=_cache)
+    logger.info('start radius worker: %s' % auth_worker)
+    logger.info('start radius worker: %s' % acct_worker)
+    if service:
+        s1 = internet.UDPServer(0,auth_worker,interface="127.0.0.1")
+        s1.setServiceParent(service)
+        s2 = internet.UDPServer(0,acct_worker,interface="127.0.0.1")
+        s2.setServiceParent(service)
+
+
+
+
+
+
+
 
 

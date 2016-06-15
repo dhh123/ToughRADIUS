@@ -56,3 +56,4 @@ toughradius_test.json
 .vscode
 tr/
 *.pid
+*.log
