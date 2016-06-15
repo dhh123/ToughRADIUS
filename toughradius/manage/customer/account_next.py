@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding=utf-8
+# coding=utf-8
 
 import cyclone.auth
 import cyclone.escape
@@ -11,7 +11,8 @@ from toughradius.manage.customer import account, account_forms
 from toughlib.permit import permit
 from toughlib import utils, dispatch
 from toughlib import redis_cache
-from toughradius.manage.settings import * 
+from toughradius.common.event_common import trigger_notify
+from toughradius.manage.settings import *
 from toughradius.manage.events import settings
 from toughradius.manage.events.settings import ACCOUNT_NEXT_EVENT
 
@@ -41,9 +42,9 @@ class AccountNextHandler(account.AccountHandler):
         form = account_forms.account_next_form()
         form.product_id.set_value(user.product_id)
         if account.status not in (1, 4):
-            return render("account_next_form", user=user, form=form, msg=u"无效用户状态")
+            return self.render("account_next_form", user=user, form=form, msg=u"无效用户状态")
         if not form.validates(source=self.get_params()):
-            return render("account_next_form", user=user, form=form)
+            return self.render("account_next_form", user=user, form=form)
 
         accept_log = models.TrAcceptLog()
         accept_log.accept_type = 'next'
@@ -55,8 +56,6 @@ class AccountNextHandler(account.AccountHandler):
         self.db.add(accept_log)
         self.db.flush()
         self.db.refresh(accept_log)
-
-        
 
         order_fee = 0
         product = self.db.query(models.TrProduct).get(user.product_id)
@@ -96,7 +95,23 @@ class AccountNextHandler(account.AccountHandler):
         self.db.add(order)
         self.add_oplog(order.order_desc)
 
+        _customer = self.db.query(models.TrCustomer).filter_by(customer_id=account.customer_id).first()
+
         self.db.commit()
+
+        user_info = dict(
+            email=_customer.email,
+            phone=_customer.mobile,
+            realname=_customer.realname,
+            product_name=product.product_name,
+            account_number=account_number,
+            password=utils.aescipher.decrypt(account.password),
+            expire_date=account.expire_date
+        )
+        notifys = dict(toughcloud_sms='toughcloud_sms_account_next')
+        notifys['smtp_mail'] = 'smtp_account_next'
+        notifys['toughcloud_mail'] = 'toughcloud_mail_account_next'
+        trigger_notify(self, user_info, **notifys)
 
         dispatch.pub(ACCOUNT_NEXT_EVENT, order.account_number, async=True)
         dispatch.pub(settings.CACHE_DELETE_EVENT,account_cache_key(account.account_number), async=True)
