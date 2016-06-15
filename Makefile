@@ -56,6 +56,9 @@ inittest:
 clean:
 	rm -fr venv
 
+bin:
+	@pyinstaller -D -c --name toughradius toughradius.spec
+
 all:install-deps venv upgrade-libs install
 
 .PHONY: all install install-deps upgrade-libs upgrade-dev upgrade test initdb inittest clean pypy pypy-initdb
