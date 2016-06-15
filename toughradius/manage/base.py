@@ -64,7 +64,7 @@ class BaseHandler(cyclone.web.RequestHandler):
                 return self.render_string("error.html", msg=u"500:服务器处理失败，请联系管理员")
             else:
                 return self.render_string("error.html", msg=u"%s:服务器处理失败，请联系管理员" % status_code)
-        except:
+        except Exception, err:
             logger.exception(err)
             return self.render_string("error.html", msg=u"%s:服务器处理失败，请联系管理员" % status_code)
 
