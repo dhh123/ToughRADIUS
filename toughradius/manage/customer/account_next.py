@@ -105,7 +105,7 @@ class AccountNextHandler(account.AccountHandler):
             realname=_customer.realname,
             product_name=product.product_name,
             account_number=account_number,
-            password=utils.aescipher.decrypt(account.password),
+            password=self.aes.decrypt(account.password),
             expire_date=account.expire_date
         )
         notifys = dict(toughcloud_sms='toughcloud_sms_account_next')
