@@ -57,3 +57,4 @@ toughradius_test.json
 tr/
 *.pid
 *.log
+twisted/plugins/dropin.cache
