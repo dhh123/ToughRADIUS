@@ -97,7 +97,7 @@ class TraceMix:
         except Exception as err:
             logger.exception(err)
 
-class RADIUSAuthWorker(TraceMix):
+class RADIUSAuthWorker(service.Service,TraceMix):
 
     def __init__(self, config, dbengine, radcache=None):
         self.config = config
@@ -106,13 +106,14 @@ class RADIUSAuthWorker(TraceMix):
         self.db_engine = dbengine or get_engine(config)
         self.aes = utils.AESCipher(key=self.config.system.secret)
         self.mcache = radcache
+
+    def startService(self):
+        service.Service.startService(self)
         self.pusher = ZmqPushConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-auth-result'))
         self.stat_pusher = ZmqPushConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-stat-task'))
         self.puller = ZmqPullConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-auth-message'))
         self.puller.onPull = self.process
-        logger.info("init auth worker pusher : %s " % (self.pusher))
-        logger.info("init auth worker puller : %s " % (self.puller))
-        logger.info("init auth stat pusher : %s " % (self.stat_pusher))
+        logger.info("radius auth worker %s start"%os.getpid())
 
 
     def find_nas(self,ip_addr):
@@ -237,21 +238,21 @@ class RADIUSAuthWorker(TraceMix):
 
 
 
-class RADIUSAcctWorker(TraceMix):
+class RADIUSAcctWorker(service.Service,TraceMix):
 
     def __init__(self, config, dbengine,radcache=None):
         self.config = config
-        self.dict = dictionary.Dictionary(
-            os.path.join(os.path.dirname(toughradius.__file__), 'dictionarys/dictionary'))
         self.db_engine = dbengine or get_engine(config)
         self.mcache = radcache
+        self.dict = dictionary.Dictionary(
+            os.path.join(os.path.dirname(toughradius.__file__), 'dictionarys/dictionary'))
+
+    def startService(self):
+        service.Service.startService(self)
         self.pusher = ZmqPushConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-acct-result'))
         self.stat_pusher = ZmqPushConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-stat-task'))
         self.puller = ZmqPullConnection(ZmqFactory(), ZmqEndpoint('connect', 'ipc:///tmp/radiusd-acct-message'))
         self.puller.onPull = self.process
-        logger.info("init acct worker pusher : %s " % (self.pusher))
-        logger.info("init acct worker puller : %s " % (self.puller))
-        logger.info("init auth stat pusher : %s " % (self.stat_pusher))
         self.acct_class = {
             STATUS_TYPE_START: RadiusAcctStart,
             STATUS_TYPE_STOP: RadiusAcctStop,
@@ -259,6 +260,7 @@ class RADIUSAcctWorker(TraceMix):
             STATUS_TYPE_ACCT_ON: RadiusAcctOnoff,
             STATUS_TYPE_ACCT_OFF: RadiusAcctOnoff
         }
+        logger.info("radius acct worker %s start"%os.getpid())
 
     def find_nas(self,ip_addr):
         def fetch_result():
@@ -353,19 +355,19 @@ class RADIUSAcctWorker(TraceMix):
 
 def run_auth(config,service=None):
     auth_protocol = RADIUSMaster(config, service='auth')
+    srv = internet.UDPServer(int(config.radiusd.auth_port),auth_protocol,interface=config.radiusd.host)
     if service:
-        s = internet.UDPServer(int(config.radiusd.auth_port),auth_protocol,interface=config.radiusd.host)
-        s.setServiceParent(service)
+        srv.setServiceParent(service)
     else:
-        reactor.listenUDP(int(config.radiusd.auth_port), auth_protocol, interface=config.radiusd.host)
+        srv.startService()
 
 def run_acct(config,service=None):
     acct_protocol = RADIUSMaster(config,service='acct')
+    srv = internet.UDPServer(int(config.radiusd.acct_port),acct_protocol,interface=config.radiusd.host)
     if service:
-        s = internet.UDPServer(int(config.radiusd.acct_port),acct_protocol,interface=config.radiusd.host)
-        s.setServiceParent(service)
+        srv.setServiceParent(service)
     else:
-        reactor.listenUDP(int(config.radiusd.acct_port), acct_protocol, interface=config.radiusd.host)
+        srv.startService()
 
 def run_worker(config,dbengine,service=None,**kwargs):
     _cache = kwargs.pop("cache",CacheManager(redis_conf(config),cache_name='RadiusWorkerCache-%s'%os.getpid()))
@@ -378,13 +380,12 @@ def run_worker(config,dbengine,service=None,**kwargs):
         dispatch.load_events(event_path,"toughradius.manage.events",event_params=event_params)
     auth_worker = RADIUSAuthWorker(config,dbengine,radcache=_cache)
     acct_worker = RADIUSAcctWorker(config,dbengine,radcache=_cache)
-    logger.info('start radius worker: %s' % auth_worker)
-    logger.info('start radius worker: %s' % acct_worker)
     if service:
-        s1 = internet.UDPServer(0,auth_worker,interface="127.0.0.1")
-        s1.setServiceParent(service)
-        s2 = internet.UDPServer(0,acct_worker,interface="127.0.0.1")
-        s2.setServiceParent(service)
+        auth_worker.setServiceParent(service)
+        acct_worker.setServiceParent(service)
+    else:
+        auth_worker.startService()
+        acct_worker.startService()
 
 
 

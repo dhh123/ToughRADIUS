@@ -95,8 +95,20 @@ class ServiceMaker(object):
         cache = CacheManager(redis_conf(config),cache_name='RadiusCache')
         aes = utils.AESCipher(key=config.system.secret)
         radiusd.run_auth(config,service=service)
-        radiusd.run_acct(config,service=service)
-        # radiusd.run_worker(config,dbengine,cache=cache,aes=aes,standalone=True,service=service)
+        # radiusd.run_acct(config,service=service)
+
+    def start_worker(self,conf,service,debug=False):
+        from toughradius.manage import radiusd
+        from toughlib.redis_cache import CacheManager
+        config = iconfig.find_config(conf)
+        self.update_timezone(config)
+        self.setup_logger(config)
+        if debug:
+            config.system.debug = True
+        dbengine = get_engine(config)
+        cache = CacheManager(redis_conf(config),cache_name='RadiusCache')
+        aes = utils.AESCipher(key=config.system.secret)
+        radiusd.run_worker(config,dbengine,cache=cache,aes=aes,standalone=True,service=service)
 
     def start_manage(self,conf,service,debug=False):
         from toughradius.manage import httpd
@@ -121,6 +133,8 @@ class ServiceMaker(object):
             self.start_manage(options["config"], srv, options["debug"])
         if options["service"] == 'radiusd':
             self.start_radiusd(options["config"], srv, options["debug"])
+        if options["service"] == 'worker':
+            self.start_worker(options["config"], srv, options["debug"])
         return srv
 
 serviceMaker = ServiceMaker()
