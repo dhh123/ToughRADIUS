@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-#coding=utf-8
+# coding=utf-8
 
 import cyclone.auth
 import cyclone.escape
 import cyclone.web
-import decimal
-import datetime
-from tablib import Dataset
 from hashlib import md5
 from toughradius.manage import models
 from toughradius.manage.customer import customer_forms
@@ -33,8 +30,9 @@ class CustomerImportHandler(CustomerHandler):
         iform = customer_forms.customer_import_form(nodes, products)
         node_id = self.get_argument('node_id')
         product_id = self.get_argument('product_id')
-        f = self.request.files['import_file'][0]
+
         try:
+            f = self.request.files['import_file'][0]
             impctx = utils.safeunicode(f['body'])
         except Exception as err:
             self.render_error(msg=u"File format error： %s" % utils.safeunicode(err))
