@@ -45,6 +45,7 @@ notify_form = btforms.Form(
         help=u"优先于到期提醒间隔，格式：(几点:几分)", **input_style),
     btforms.Textbox("expire_notify_url", description=u"到期通知触发URL", **input_style),
     btforms.Textbox("expire_session_timeout", description=u"到期用户下发最大会话时长(秒)", **input_style),
+    btforms.Textbox("balance_threshold", rules.is_number, description=u"触发用户余额通知阈值(元)", **input_style),
     btforms.Textbox("expire_addrpool", description=u"到期提醒下发地址池", **input_style),
     btforms.Button("submit", type="submit", html=u"<b>更新</b>", **button_style),
     title=u"参数配置管理",
