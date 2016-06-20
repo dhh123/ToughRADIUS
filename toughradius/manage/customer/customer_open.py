@@ -14,8 +14,7 @@ from toughradius.manage.customer.customer import CustomerHandler
 from toughlib.permit import permit
 from toughlib import utils, dispatch
 from toughlib.btforms import rules
-from toughlib import redis_cache
-from toughradius.common.event_common import trigger_notify
+from toughradius.manage.base import trigger_notify
 from toughradius.manage.settings import * 
 from toughradius.manage.events import settings
 from toughradius.manage.events.settings import ACCOUNT_OPEN_EVENT
@@ -45,8 +44,7 @@ class CustomerOpenHandler(CustomerHandler):
         if form.d.ip_address and self.db.query(models.TrAccount).filter_by(ip_address=form.d.ip_address).count() > 0:
             return self.render("account_open_form.html", form=form, msg=u"ip%s已经被使用" % form.d.ip_address)
 
-        if self.db.query(models.TrCustomer).filter_by(
-            customer_name=form.d.account_number).count() > 0:
+        if self.db.query(models.TrCustomer).filter_by(customer_name=form.d.account_number).count() > 0:
             return self.render("account_open_form.html", form=form, msg=u"用户名%s已经存在" % form.d.account_number)
 
         customer = models.TrCustomer()
